@@ -1,0 +1,252 @@
+# govee-discovery
+
+A small Python toolchain for discovering and interrogating Govee devices that support the Govee LAN Control API.
+
+This project is intended to act as a **registry builder** that can later feed an operational module (for example, an Art-Net → Govee bridge). Discovery and operational control are intentionally separate concerns.
+
+---
+
+## Directory Structure
+
+```
+govee-lan-discovery/
+  pyproject.toml           Packaging and console script entrypoint
+  README.md                Usage and project documentation
+  LICENSE                  MIT license
+  .gitignore               Ignored files for Python + runtime artifacts
+
+  govee_discovery/
+    __init__.py            Package version
+    cli.py                 Command line interface (govee-discovery)
+    net.py                 UDP socket helpers and port/group constants
+    store.py               SQLite registry schema and query helpers
+    discovery.py           LAN scan (multicast request + UDP/4002 listener)
+    interrogate.py         Follow-on device interrogation (devStatus) and enrichment
+```
+
+---
+
+## File Descriptions
+
+### Root Files
+
+- **pyproject.toml**  
+  Python packaging metadata and console script entrypoint definition. Installs the `govee-discovery` command.
+
+- **README.md**  
+  Project overview, architecture, usage, and data model documentation.
+
+- **LICENSE**  
+  MIT license text.
+
+- **.gitignore**  
+  Ignores virtual environments, build artifacts, caches, SQLite databases, and logs.
+
+### Package Files (`govee_discovery/`)
+
+- **__init__.py**  
+  Package version constant.
+
+- **cli.py**  
+  Command-line interface implementation providing:
+  - `scan`: send multicast scan request(s) and listen for responses
+  - `listen`: listen only for responses (no scan requests)
+  - `interrogate`: query devices for `devStatus` and optionally normalize data
+  - `dump`: dump database tables (`devices`, `events`, `interrogations`, `kv`) as JSON
+
+- **net.py**  
+  UDP constants (multicast group and ports) and helpers to create:
+  - multicast sender socket (scan request)
+  - listener socket (scan responses)
+  - control socket (devStatus)
+
+- **store.py**  
+  SQLite schema and storage/query helpers. Persists:
+  - `devices`: latest snapshot per device
+  - `scan_events`: raw discovery packet history
+  - `interrogations`: request/response history
+  - `device_kv`: normalized key/value attributes
+  - `device_tags`: optional tagging (future use)
+
+- **discovery.py**  
+  Discovery logic:
+  - sends scan request to `239.255.255.250:4001`
+  - listens for scan responses on UDP `4002`
+  - stores raw packets and upserts devices into SQLite
+
+- **interrogate.py**  
+  Follow-on enrichment:
+  - sends `devStatus` to each device on UDP `4003`
+  - stores request/response history
+  - optionally normalizes common fields into `device_kv`
+
+---
+
+## What It Does
+
+### 1. Discovery
+
+- Sends a multicast scan request to `239.255.255.250:4001`
+- Listens for scan responses on UDP `4002`
+- Saves raw scan packets and a normalized device registry into SQLite
+
+### 2. Interrogation / Enrichment
+
+- Queries each discovered device on UDP `4003` using `devStatus`
+- Saves request/response pairs into SQLite
+- Optionally normalizes key fields into a flexible key/value table (`device_kv`)
+
+### 3. JSON Dump Utilities
+
+- Dump `devices`, `events`, `interrogations`
+- Dump `kv` entries per-device or globally, with optional key-prefix filtering
+
+---
+
+## Requirements
+
+- Debian 13 (or any Linux with Python 3.11+)
+- Network reachability to the IoT network where Govee devices live
+- For discovery across VLANs, multicast + UDP/4002 must be permitted
+
+If multicast is unavailable:
+- Run discovery on a host in the device VLAN and copy the SQLite DB
+- Or skip discovery entirely and use static IPs in the operational module
+
+---
+
+## Install (Editable / Development)
+
+```
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e .
+```
+
+---
+
+## Usage
+
+All commands accept:
+
+- `--db <path>`  
+  SQLite registry DB path (default: `./govee_registry.sqlite`)
+
+- `--bind-ip <ip>`  
+  Local IPv4 to bind on multi-homed hosts
+
+---
+
+### Scan
+
+Send multicast scan requests and listen for responses:
+
+```
+govee-discovery scan --db ./govee_registry.sqlite --duration 20 --verbose
+```
+
+Options:
+
+- `--scan-repeat N` (default: 3)
+- `--scan-interval SECONDS`
+- `--resolve-mac` best-effort MAC lookup via `ip neigh`
+- `--duration 0` run forever
+
+---
+
+### Listen Only
+
+Listen for scan responses without sending scan packets:
+
+```
+govee-discovery listen --db ./govee_registry.sqlite --duration 0 --verbose
+```
+
+---
+
+### Interrogate
+
+Query all discovered devices using `devStatus`:
+
+```
+govee-discovery interrogate --db ./govee_registry.sqlite --verbose
+```
+
+Options:
+
+- `--timeout SECONDS` (default: 2.0)
+- `--only-ip A.B.C.D` (repeatable)
+- `--no-enrich` do not normalize fields into `device_kv`
+
+---
+
+### Dump Registry
+
+Dump devices:
+
+```
+govee-discovery dump devices --db ./govee_registry.sqlite --pretty
+```
+
+Dump scan events:
+
+```
+govee-discovery dump events --db ./govee_registry.sqlite --limit 200 --pretty
+```
+
+Dump interrogations:
+
+```
+govee-discovery dump interrogations --db ./govee_registry.sqlite --limit 200 --pretty
+```
+
+Dump key/value attributes:
+
+```
+govee-discovery dump kv --db ./govee_registry.sqlite --pretty
+```
+
+Dump kv for one device:
+
+```
+govee-discovery dump kv --db ./govee_registry.sqlite --device-id DEVICE_ID --pretty
+```
+
+Dump kv by prefix:
+
+```
+govee-discovery dump kv --db ./govee_registry.sqlite --device-id DEVICE_ID --key-prefix status. --pretty
+```
+
+---
+
+## SQLite Data Model
+
+### devices
+Latest per-device snapshot from discovery and interrogation. Stores raw JSON from last scan and last `devStatus`.
+
+### scan_events
+Raw discovery packets (verbatim), timestamp, and sender address.
+
+### interrogations
+Request/response history per device for follow-on queries.
+
+### device_kv
+Flexible normalized attributes (future-proof; avoids migrations).
+
+### device_tags
+Optional tagging/grouping (future use).
+
+---
+
+## Notes
+
+- MAC address resolution is best-effort and typically unavailable across routed VLANs.
+- This project is intentionally discovery-only; operational control belongs in a separate module.
+
+---
+
+## License
+
+MIT
+
