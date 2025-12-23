@@ -6,6 +6,14 @@ import json
 import sys
 
 from . import __version__
+from .control import (
+    build_brightness_command,
+    build_color_command,
+    build_color_temp_command,
+    build_turn_command,
+    parse_color,
+    send_control_command,
+)
 from .discovery import run_listener, run_scan
 from .interrogate import interrogate_all
 from .store import RegistryStore
@@ -98,8 +106,91 @@ def cmd_interrogate(args: argparse.Namespace) -> int:
         store.close()
 
 
+def _resolve_target_ip(store: RegistryStore, ip: str | None, device_id: str | None) -> str:
+    if ip:
+        return ip
+    if not device_id:
+        raise ValueError("must supply --ip or --device-id")
+    resolved = store.get_device_ip(device_id)
+    if not resolved:
+        raise ValueError(f"no IP found for device_id={device_id}")
+    return resolved
+
+
+def cmd_control(args: argparse.Namespace) -> int:
+    store = RegistryStore(args.db)
+    try:
+        ip = _resolve_target_ip(store, args.ip, args.device_id)
+        try:
+            if args.action == "on":
+                payload = build_turn_command(True)
+            elif args.action == "off":
+                payload = build_turn_command(False)
+            elif args.action == "color":
+                r, g, b = parse_color(args.color)
+                payload = build_color_command(r, g, b)
+            elif args.action == "brightness":
+                if not 0 <= args.value <= 100:
+                    raise ValueError("brightness must be between 0 and 100")
+                payload = build_brightness_command(args.value)
+            elif args.action == "color-temp":
+                if args.kelvin <= 0:
+                    raise ValueError("color temperature must be positive")
+                payload = build_color_temp_command(args.kelvin)
+            else:
+                raise ValueError(f"unknown control action: {args.action}")
+        except ValueError as exc:
+            print(f"[control] invalid input: {exc}", flush=True)
+            return 2
+
+        ok, resp, err = send_control_command(
+            ip=ip,
+            payload=payload,
+            bind_ip=args.bind_ip,
+            timeout_s=args.timeout,
+            wait_response=not args.no_wait,
+        )
+
+        if not ok:
+            print(f"[control] ip={ip} action={args.action} error={err or 'unknown'}", flush=True)
+            return 1
+
+        if resp is not None:
+            if args.pretty:
+                json.dump(resp, sys.stdout, indent=2, ensure_ascii=False)
+            else:
+                json.dump(resp, sys.stdout, separators=(",", ":"), ensure_ascii=False)
+            sys.stdout.write("\n")
+        elif err:
+            print(f"[control] ip={ip} action={args.action} warning={err}", flush=True)
+        elif args.verbose:
+            print(f"[control] ip={ip} action={args.action} ok", flush=True)
+        return 0
+    finally:
+        store.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="govee-discovery", description="Govee LAN discovery + registry tools.")
+    examples = "\n".join(
+        [
+            "Examples:",
+            "  govee-discovery scan --db ./govee_registry.sqlite --duration 20 --verbose",
+            "  govee-discovery listen --db ./govee_registry.sqlite --duration 0 --verbose",
+            "  govee-discovery interrogate --db ./govee_registry.sqlite --verbose",
+            "  govee-discovery dump devices --db ./govee_registry.sqlite --pretty",
+            "  govee-discovery control --ip 192.168.1.50 on",
+            "  govee-discovery control --device-id ABCD1234 color red",
+            "  govee-discovery control --ip 192.168.1.50 color #ff8800",
+            "  govee-discovery control --ip 192.168.1.50 brightness 75",
+            "  govee-discovery control --ip 192.168.1.50 color-temp 3500",
+        ]
+    )
+    p = argparse.ArgumentParser(
+        prog="govee-discovery",
+        description="Govee LAN discovery + registry tools.",
+        epilog=examples,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -141,6 +232,46 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--no-enrich", action="store_true", help="Do not normalize status fields into device_kv.")
     pi.add_argument("--verbose", action="store_true")
     pi.set_defaults(func=cmd_interrogate)
+
+    # control
+    control_examples = "\n".join(
+        [
+            "Examples:",
+            "  govee-discovery control --ip 192.168.1.50 on",
+            "  govee-discovery control --device-id ABCD1234 color red",
+            "  govee-discovery control --ip 192.168.1.50 color #ff8800",
+            "  govee-discovery control --ip 192.168.1.50 brightness 75",
+            "  govee-discovery control --ip 192.168.1.50 color-temp 3500",
+        ]
+    )
+    pc = sub.add_parser(
+        "control",
+        help="Send LAN control commands to a device.",
+        epilog=control_examples,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    add_common_db_args(pc)
+    pc.add_argument("--ip", help="Target device IP.")
+    pc.add_argument("--device-id", help="Target device ID (lookup IP from registry).")
+    pc.add_argument("--timeout", type=float, default=2.0, help="UDP receive timeout (seconds).")
+    pc.add_argument("--no-wait", action="store_true", help="Do not wait for a response.")
+    pc.add_argument("--pretty", action="store_true", help="Pretty-print any response JSON.")
+    pc.add_argument("--verbose", action="store_true")
+
+    pc_sub = pc.add_subparsers(dest="action", required=True)
+    pc_sub.add_parser("on", help="Turn the device on.")
+    pc_sub.add_parser("off", help="Turn the device off.")
+
+    pc_color = pc_sub.add_parser("color", help="Set RGB color (name or hex).")
+    pc_color.add_argument("color", help="Color name (red) or hex (RRGGBB/#RRGGBB).")
+
+    pc_brightness = pc_sub.add_parser("brightness", help="Set brightness (0-100).")
+    pc_brightness.add_argument("value", type=int, help="Brightness percent (0-100).")
+
+    pc_ct = pc_sub.add_parser("color-temp", help="Set color temperature in Kelvin.")
+    pc_ct.add_argument("kelvin", type=int, help="Color temperature in Kelvin (device range).")
+
+    pc.set_defaults(func=cmd_control)
 
     return p
 

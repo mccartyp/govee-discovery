@@ -53,6 +53,7 @@ govee-lan-discovery/
   - `listen`: listen only for responses (no scan requests)
   - `interrogate`: query devices for `devStatus` and optionally normalize data
   - `dump`: dump database tables (`devices`, `events`, `interrogations`, `kv`) as JSON
+  - `control`: send LAN control commands (on/off/color/brightness/color temperature)
 
 - **net.py**  
   UDP constants (multicast group and ports) and helpers to create:
@@ -79,6 +80,11 @@ govee-lan-discovery/
   - sends `devStatus` to each device on UDP `4003`
   - stores request/response history
   - optionally normalizes common fields into `device_kv`
+
+- **control.py**  
+  Control command support:
+  - sends LAN control commands (on/off/color/brightness/color temperature) on UDP `4003`
+  - optional response capture for debugging
 
 ---
 
@@ -220,6 +226,25 @@ govee-discovery dump kv --db ./govee_registry.sqlite --device-id DEVICE_ID --key
 
 ---
 
+### Control (LAN Commands)
+
+Send control commands to a device using its IP or device ID (looked up from the registry):
+
+```
+govee-discovery control --ip 192.168.1.50 on
+govee-discovery control --device-id ABCD1234 color red
+govee-discovery control --ip 192.168.1.50 color #ff8800
+govee-discovery control --ip 192.168.1.50 brightness 75
+govee-discovery control --ip 192.168.1.50 color-temp 3500
+```
+
+Notes:
+- Color accepts common names (red, green, blue, white, warmwhite, yellow, orange, purple, pink, cyan, magenta)
+  or hex RGB strings (`RRGGBB` / `#RRGGBB`).
+- Use `--no-wait` to skip waiting for device responses.
+
+---
+
 ## SQLite Data Model
 
 ### devices
@@ -242,11 +267,10 @@ Optional tagging/grouping (future use).
 ## Notes
 
 - MAC address resolution is best-effort and typically unavailable across routed VLANs.
-- This project is intentionally discovery-only; operational control belongs in a separate module.
+- This project includes basic LAN control for testing; full operational control can live in a separate module.
 
 ---
 
 ## License
 
 MIT
-

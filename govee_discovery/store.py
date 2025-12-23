@@ -374,3 +374,10 @@ class RegistryStore:
             "SELECT device_id, ip, sku FROM devices WHERE ip IS NOT NULL ORDER BY last_seen_ms DESC"
         )
         return [{"device_id": r[0], "ip": r[1], "sku": r[2]} for r in cur.fetchall()]
+
+    def get_device_ip(self, device_id: str) -> Optional[str]:
+        cur = self.conn.execute("SELECT ip FROM devices WHERE device_id=?", (device_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return row[0]
