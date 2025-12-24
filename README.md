@@ -237,11 +237,15 @@ govee-discovery control --device-id ABCD1234 color red
 govee-discovery control --ip 192.168.1.50 color #ff8800
 govee-discovery control --ip 192.168.1.50 brightness 75
 govee-discovery control --ip 192.168.1.50 color-temp 3500
+govee-discovery control --ip 192.168.1.50 colorwc --kelvin 4000 --color #ffaa88
+govee-discovery control --ip 192.168.1.50 colorwc --kelvin 2700
 ```
 
 Notes:
 - Color accepts common names (red, green, blue, white, warmwhite, yellow, orange, purple, pink, cyan, magenta)
   or hex RGB strings (`RRGGBB` / `#RRGGBB`).
+- `colorwc` sends combined RGB + `colorTemInKelvin` payloads for WW/CW or hybrid models (some ignore the RGB value).
+  If `--color` is omitted, a warm or cool white is used by default based on the requested Kelvin.
 - Use `--no-wait` to skip waiting for device responses.
 
 ---

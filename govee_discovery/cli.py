@@ -10,6 +10,7 @@ from .control import (
     build_brightness_command,
     build_color_command,
     build_color_temp_command,
+    build_colorwc_command,
     build_turn_command,
     parse_color,
     send_control_command,
@@ -138,6 +139,15 @@ def cmd_control(args: argparse.Namespace) -> int:
                 if args.kelvin <= 0:
                     raise ValueError("color temperature must be positive")
                 payload = build_color_temp_command(args.kelvin)
+            elif args.action == "colorwc":
+                if args.kelvin <= 0:
+                    raise ValueError("color temperature must be positive")
+                if args.color:
+                    color = parse_color(args.color)
+                else:
+                    default_color = "warmwhite" if args.kelvin < 4000 else "white"
+                    color = parse_color(default_color)
+                payload = build_colorwc_command(args.kelvin, color)
             else:
                 raise ValueError(f"unknown control action: {args.action}")
         except ValueError as exc:
@@ -244,6 +254,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  govee-discovery control --ip 192.168.1.50 color #ff8800",
             "  govee-discovery control --ip 192.168.1.50 brightness 75",
             "  govee-discovery control --ip 192.168.1.50 color-temp 3500",
+            "  govee-discovery control --ip 192.168.1.50 colorwc --kelvin 4000 --color #ffaa88",
+            "  govee-discovery control --ip 192.168.1.50 colorwc --kelvin 2700",
         ]
     )
     pc = sub.add_parser(
@@ -272,6 +284,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     pc_ct = pc_sub.add_parser("color-temp", help="Set color temperature in Kelvin.")
     pc_ct.add_argument("kelvin", type=int, help="Color temperature in Kelvin (device range).")
+
+    pc_colorwc = pc_sub.add_parser(
+        "colorwc",
+        help="Set Kelvin with optional RGB (color + white/cold white) on dual-capability devices.",
+    )
+    pc_colorwc.add_argument("--kelvin", type=int, required=True, help="Color temperature in Kelvin (device range).")
+    pc_colorwc.add_argument(
+        "--color",
+        default=None,
+        help="Optional color name (red) or hex (RRGGBB/#RRGGBB); defaults to warm/cool white when omitted.",
+    )
 
     pc.set_defaults(func=cmd_control)
 
