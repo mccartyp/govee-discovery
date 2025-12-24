@@ -235,12 +235,12 @@ Send control commands to a device using its IP or device ID (looked up from the 
 govee-discovery control --ip 192.168.1.50 on
 govee-discovery control --device-id ABCD1234 color red
 govee-discovery control --ip 192.168.1.50 color #ff8800
-govee-discovery control --ip 192.168.1.50 brightness 75
-govee-discovery control --ip 192.168.1.50 color-temp 3500
-govee-discovery control --ip 192.168.1.50 colorwc --kelvin 4000 --color #ffaa88
 govee-discovery control --ip 192.168.1.50 colorwc --kelvin 2700
 govee-discovery control --ip 192.168.1.50 color red --color-cmd colorwc --kelvin 3200
 govee-discovery control --ip 192.168.1.50 color red --color-cmd setColor --color-scale 100
+govee-discovery control --ip 192.168.1.50 brightness 75
+govee-discovery control --ip 192.168.1.50 color-temp 3500
+govee-discovery control --ip 192.168.1.50 colorwc --kelvin 4000 --color #ffaa88
 ```
 
 Notes:

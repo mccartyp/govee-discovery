@@ -202,6 +202,9 @@ def build_parser() -> argparse.ArgumentParser:
             "  govee-discovery control --ip 192.168.1.50 on",
             "  govee-discovery control --device-id ABCD1234 color red",
             "  govee-discovery control --ip 192.168.1.50 color #ff8800",
+            "  govee-discovery control --ip 192.168.1.50 colorwc --kelvin 2700",
+            "  govee-discovery control --ip 192.168.1.50 color red --color-cmd colorwc --kelvin 3200",
+            "  govee-discovery control --ip 192.168.1.50 color red --color-cmd setColor --color-scale 100",
             "  govee-discovery control --ip 192.168.1.50 brightness 75",
             "  govee-discovery control --ip 192.168.1.50 color-temp 3500",
         ]
@@ -288,22 +291,27 @@ def build_parser() -> argparse.ArgumentParser:
     pc_sub.add_parser("on", help="Turn the device on.")
     pc_sub.add_parser("off", help="Turn the device off.")
 
-    pc_color = pc_sub.add_parser("color", help="Set RGB color (name or hex).")
+    pc_color = pc_sub.add_parser("color", help="Set RGB color (name or hex) with optional Kelvin payload.")
     pc_color.add_argument("color", help="Color name (red) or hex (RRGGBB/#RRGGBB).")
     pc_color.add_argument(
         "--color-cmd",
         choices=["color", "colorwc", "setColor"],
         default="color",
-        help="Optional command name override for RGB-capable devices.",
+        help="Override the command used for RGB/WW/CW devices (colorwc includes Kelvin; setColor for legacy).",
     )
     pc_color.add_argument(
         "--color-scale",
         choices=[100, 255],
         type=int,
         default=255,
-        help="Scale RGB output to 0-100 (some models expect 0-100 instead of 0-255).",
+        help="Scale RGB output to 0-100 for models that expect percentage values instead of 0-255.",
     )
-    pc_color.add_argument("--kelvin", type=int, default=None, help="Kelvin to include when using --color-cmd colorwc.")
+    pc_color.add_argument(
+        "--kelvin",
+        type=int,
+        default=None,
+        help="Optional Kelvin to include when using --color-cmd colorwc for combined RGB/Kelvin payloads.",
+    )
 
     pc_brightness = pc_sub.add_parser("brightness", help="Set brightness (0-100).")
     pc_brightness.add_argument("value", type=int, help="Brightness percent (0-100).")
@@ -313,7 +321,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pc_colorwc = pc_sub.add_parser(
         "colorwc",
-        help="Set Kelvin with optional RGB (color + white/cold white) on dual-capability devices.",
+        help="Set Kelvin with optional RGB (color + warm/cool white) on dual-capability devices.",
     )
     pc_colorwc.add_argument("--kelvin", type=int, required=False, default=None, help="Color temperature in Kelvin.")
     pc_colorwc.add_argument(
