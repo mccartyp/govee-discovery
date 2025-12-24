@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import socket
+import time
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional, Sequence
 
@@ -178,11 +179,15 @@ def run_color_probe(
     verbose: bool,
 ) -> list[ColorProbeResult]:
     results: list[ColorProbeResult] = []
+    first = True
     for cmd, scale, kelvin, color_name, payload in iter_color_probe_payloads(
         colors=colors,
         kelvin_values=kelvin_values,
         include_no_kelvin=include_no_kelvin,
     ):
+        if not first:
+            time.sleep(1.0)
+        first = False
         if verbose:
             payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             print(
@@ -207,6 +212,11 @@ def run_color_probe(
             error=err,
         )
         results.append(result)
+        status = result.status()
+        print(
+            f"[probe] cmd={cmd} scale={scale} kelvin={kelvin if kelvin is not None else '-'} color={color_name} status={status}",
+            flush=True,
+        )
         if stop_on_success and result.ok and result.resp is not None:
             break
     return results
