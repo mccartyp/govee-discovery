@@ -111,8 +111,8 @@ def build_color_payload(
 
     if cmd in {"color", "setColor"} and "color" not in data:
         raise ValueError(f"{cmd} command requires a color value")
-    if cmd in {"colorwc", "setColorWC"} and "colorTemInKelvin" not in data:
-        raise ValueError(f"{cmd} command requires a positive kelvin value")
+    if cmd in {"colorwc", "setColorWC"} and "color" not in data and "colorTemInKelvin" not in data:
+        raise ValueError(f"{cmd} command requires either a color value or kelvin value")
 
     return {"msg": {"cmd": cmd, "data": data}}
 
