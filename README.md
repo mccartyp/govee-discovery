@@ -181,6 +181,7 @@ govee-discovery interrogate --db ./govee_registry.sqlite --verbose
 Options:
 
 - `--timeout SECONDS` (default: 2.0)
+- `--ip A.B.C.D` (repeatable) interrogate IPs directly (bypass registry)
 - `--only-ip A.B.C.D` (repeatable)
 - `--no-enrich` do not normalize fields into `device_kv`
 
