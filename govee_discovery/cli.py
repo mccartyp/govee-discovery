@@ -401,9 +401,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scale RGB output to 0-100 (some models expect 0-100 instead of 0-255).",
     )
 
+    pc_probe_examples = "\n".join(
+        [
+            "Example:",
+            "  govee-discovery control --ip 192.168.1.50 color-probe --verbose --stop-on-success",
+        ]
+    )
     pc_probe = pc_sub.add_parser(
         "color-probe",
-        help="Try color variants (color/colorwc/setColor/setColorWC, 0-255 + 0-100, Kelvin/no Kelvin).",
+        help="Try color variants (logs each attempt, pauses between tries, does not fail on missing replies).",
+        description=(
+            "Iterate through common color payload variants (color/colorwc/setColor/setColorWC) across RGB scales "
+            "and Kelvin inclusion. Each attempt is logged, a 1s pause is inserted between attempts to avoid "
+            "flooding, and missing replies are recorded as timeouts instead of failing the probe."
+        ),
+        epilog=pc_probe_examples,
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     pc_probe.add_argument(
         "--color",

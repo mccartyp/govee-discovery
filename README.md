@@ -272,6 +272,8 @@ Example (stops after the first response):
 govee-discovery control --ip 192.168.1.50 color-probe --stop-on-success --verbose
 [probe] ip=192.168.1.50 cmd=color scale=255 kelvin=- color=red payload={"msg":{"cmd":"color","data":{"color":{"r":255,"g":0,"b":0}}}}
 [probe] ip=192.168.1.50 cmd=colorwc scale=255 kelvin=3000 color=red payload={"msg":{"cmd":"colorwc","data":{"color":{"r":255,"g":0,"b":0},"colorTemInKelvin":3000}}}
+[probe] cmd=color scale=255 kelvin=- color=red status=timeout
+[probe] cmd=colorwc scale=255 kelvin=3000 color=red status=resp code=200
 cmd       scale  kelvin  color  status
 --------- ------ ------- ------ ---------
 color     255    -       red    timeout
@@ -283,6 +285,8 @@ Options:
 - `--kelvin` Repeatable list of Kelvin values. Default: `3000`, `4000`, `6500`.
 - `--require-kelvin` Skip pure RGB payloads (only send combined RGB/Kelvin variants).
 - `--stop-on-success` Stop probing once any response is received.
+- Each attempt is logged (command, scale, Kelvin, color, status) and a 1-second pause is inserted between attempts
+  to avoid flooding devices. Missing replies are recorded as `timeout` instead of failing the probe.
 
 ---
 
