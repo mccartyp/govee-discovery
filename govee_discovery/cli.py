@@ -354,8 +354,8 @@ def build_parser() -> argparse.ArgumentParser:
     pc_color.add_argument(
         "--color-cmd",
         choices=["color", "colorwc", "setColor"],
-        default="color",
-        help="Override the command used for RGB/WW/CW devices (colorwc includes Kelvin; setColor for legacy).",
+        default="colorwc",
+        help="Override the command used for RGB/WW/CW devices (colorwc is recommended for most devices).",
     )
     pc_color.add_argument(
         "--color-scale",

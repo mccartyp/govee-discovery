@@ -57,11 +57,11 @@ def build_brightness_command(value: int) -> dict[str, Any]:
 
 
 def build_color_command(r: int, g: int, b: int) -> dict[str, Any]:
-    return {"msg": {"cmd": "color", "data": {"color": {"r": r, "g": g, "b": b}}}}
+    return {"msg": {"cmd": "colorwc", "data": {"color": {"r": r, "g": g, "b": b}}}}
 
 
 def build_color_temp_command(kelvin: int) -> dict[str, Any]:
-    return {"msg": {"cmd": "colorTem", "data": {"value": kelvin}}}
+    return {"msg": {"cmd": "colorwc", "data": {"colorTemInKelvin": kelvin}}}
 
 
 def build_colorwc_command(kelvin: int, color: tuple[int, int, int] | None) -> dict[str, Any]:
