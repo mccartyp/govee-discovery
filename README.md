@@ -239,6 +239,8 @@ govee-discovery control --ip 192.168.1.50 brightness 75
 govee-discovery control --ip 192.168.1.50 color-temp 3500
 govee-discovery control --ip 192.168.1.50 colorwc --kelvin 4000 --color #ffaa88
 govee-discovery control --ip 192.168.1.50 colorwc --kelvin 2700
+govee-discovery control --ip 192.168.1.50 color red --color-cmd colorwc --kelvin 3200
+govee-discovery control --ip 192.168.1.50 color red --color-cmd setColor --color-scale 100
 ```
 
 Notes:
@@ -246,6 +248,11 @@ Notes:
   or hex RGB strings (`RRGGBB` / `#RRGGBB`).
 - `colorwc` sends combined RGB + `colorTemInKelvin` payloads for WW/CW or hybrid models (some ignore the RGB value).
   If `--color` is omitted, a warm or cool white is used by default based on the requested Kelvin.
+- `--color-cmd {color,colorwc,setColor}` picks the command name used in the payload. Try `colorwc` when a device
+  needs the Kelvin field to accept color changes, or `setColor` if `color` appears to be ignored.
+- `--kelvin` can be supplied to the `color` action when using `--color-cmd colorwc` to send combined color/Kelvin
+  payloads.
+- `--color-scale` scales RGB values to `0-100` instead of `0-255` for models that expect the smaller range.
 - Use `--no-wait` to skip waiting for device responses.
 
 ---

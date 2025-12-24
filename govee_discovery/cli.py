@@ -8,9 +8,8 @@ import sys
 from . import __version__
 from .control import (
     build_brightness_command,
-    build_color_command,
     build_color_temp_command,
-    build_colorwc_command,
+    build_color_payload,
     build_turn_command,
     parse_color,
     send_control_command,
@@ -130,7 +129,12 @@ def cmd_control(args: argparse.Namespace) -> int:
                 payload = build_turn_command(False)
             elif args.action == "color":
                 r, g, b = parse_color(args.color)
-                payload = build_color_command(r, g, b)
+                payload = build_color_payload(
+                    args.color_cmd,
+                    color=(r, g, b),
+                    kelvin=args.kelvin,
+                    scale_max=args.color_scale,
+                )
             elif args.action == "brightness":
                 if not 0 <= args.value <= 100:
                     raise ValueError("brightness must be between 0 and 100")
@@ -140,19 +144,25 @@ def cmd_control(args: argparse.Namespace) -> int:
                     raise ValueError("color temperature must be positive")
                 payload = build_color_temp_command(args.kelvin)
             elif args.action == "colorwc":
-                if args.kelvin <= 0:
-                    raise ValueError("color temperature must be positive")
-                if args.color:
-                    color = parse_color(args.color)
-                else:
-                    default_color = "warmwhite" if args.kelvin < 4000 else "white"
+                color = parse_color(args.color) if args.color else None
+                if color is None:
+                    default_color = "warmwhite" if args.kelvin is not None and args.kelvin < 4000 else "white"
                     color = parse_color(default_color)
-                payload = build_colorwc_command(args.kelvin, color)
+                payload = build_color_payload(
+                    args.color_cmd,
+                    color=color,
+                    kelvin=args.kelvin,
+                    scale_max=args.color_scale,
+                )
             else:
                 raise ValueError(f"unknown control action: {args.action}")
         except ValueError as exc:
             print(f"[control] invalid input: {exc}", flush=True)
             return 2
+
+        if args.verbose:
+            payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            print(f"[control] ip={ip} action={args.action} payload={payload_json}", flush=True)
 
         ok, resp, err = send_control_command(
             ip=ip,
@@ -256,6 +266,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  govee-discovery control --ip 192.168.1.50 color-temp 3500",
             "  govee-discovery control --ip 192.168.1.50 colorwc --kelvin 4000 --color #ffaa88",
             "  govee-discovery control --ip 192.168.1.50 colorwc --kelvin 2700",
+            "  govee-discovery control --ip 192.168.1.50 color red --color-cmd colorwc --kelvin 3200",
+            "  govee-discovery control --ip 192.168.1.50 color red --color-cmd setColor --color-scale 100",
         ]
     )
     pc = sub.add_parser(
@@ -278,6 +290,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     pc_color = pc_sub.add_parser("color", help="Set RGB color (name or hex).")
     pc_color.add_argument("color", help="Color name (red) or hex (RRGGBB/#RRGGBB).")
+    pc_color.add_argument(
+        "--color-cmd",
+        choices=["color", "colorwc", "setColor"],
+        default="color",
+        help="Optional command name override for RGB-capable devices.",
+    )
+    pc_color.add_argument(
+        "--color-scale",
+        choices=[100, 255],
+        type=int,
+        default=255,
+        help="Scale RGB output to 0-100 (some models expect 0-100 instead of 0-255).",
+    )
+    pc_color.add_argument("--kelvin", type=int, default=None, help="Kelvin to include when using --color-cmd colorwc.")
 
     pc_brightness = pc_sub.add_parser("brightness", help="Set brightness (0-100).")
     pc_brightness.add_argument("value", type=int, help="Brightness percent (0-100).")
@@ -289,11 +315,24 @@ def build_parser() -> argparse.ArgumentParser:
         "colorwc",
         help="Set Kelvin with optional RGB (color + white/cold white) on dual-capability devices.",
     )
-    pc_colorwc.add_argument("--kelvin", type=int, required=True, help="Color temperature in Kelvin (device range).")
+    pc_colorwc.add_argument("--kelvin", type=int, required=False, default=None, help="Color temperature in Kelvin.")
     pc_colorwc.add_argument(
         "--color",
         default=None,
         help="Optional color name (red) or hex (RRGGBB/#RRGGBB); defaults to warm/cool white when omitted.",
+    )
+    pc_colorwc.add_argument(
+        "--color-cmd",
+        choices=["color", "colorwc", "setColor"],
+        default="colorwc",
+        help="Override the command name used for combined color + Kelvin payloads.",
+    )
+    pc_colorwc.add_argument(
+        "--color-scale",
+        choices=[100, 255],
+        type=int,
+        default=255,
+        help="Scale RGB output to 0-100 (some models expect 0-100 instead of 0-255).",
     )
 
     pc.set_defaults(func=cmd_control)
