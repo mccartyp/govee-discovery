@@ -241,6 +241,7 @@ govee-discovery control --ip 192.168.1.50 color red --color-cmd setColor --color
 govee-discovery control --ip 192.168.1.50 brightness 75
 govee-discovery control --ip 192.168.1.50 color-temp 3500
 govee-discovery control --ip 192.168.1.50 colorwc --kelvin 4000 --color #ffaa88
+govee-discovery control --ip 192.168.1.50 color-probe --stop-on-success
 ```
 
 Notes:
@@ -254,6 +255,34 @@ Notes:
   payloads.
 - `--color-scale` scales RGB values to `0-100` instead of `0-255` for models that expect the smaller range.
 - Use `--no-wait` to skip waiting for device responses.
+
+#### Probe control payloads
+
+Use `color-probe` to iterate through common LAN control payload variants to learn which combination your device
+responds to. The probe tries:
+
+- Command names: `color`, `colorwc`, `setColor`, `setColorWC`
+- RGB scales: `0-255` and `0-100`
+- Kelvin values: defaults to `3000`, `4000`, `6500`; configurable via `--kelvin`
+- With and without Kelvin for pure RGB commands (unless `--require-kelvin` is set)
+
+Example (stops after the first response):
+
+```
+govee-discovery control --ip 192.168.1.50 color-probe --stop-on-success --verbose
+[probe] ip=192.168.1.50 cmd=color scale=255 kelvin=- color=red payload={"msg":{"cmd":"color","data":{"color":{"r":255,"g":0,"b":0}}}}
+[probe] ip=192.168.1.50 cmd=colorwc scale=255 kelvin=3000 color=red payload={"msg":{"cmd":"colorwc","data":{"color":{"r":255,"g":0,"b":0},"colorTemInKelvin":3000}}}
+cmd       scale  kelvin  color  status
+--------- ------ ------- ------ ---------
+color     255    -       red    timeout
+colorwc   255    3000    red    resp code=200
+```
+
+Options:
+- `--color` Repeatable list of test colors (name or hex). Default: `red`, `green`, `blue`.
+- `--kelvin` Repeatable list of Kelvin values. Default: `3000`, `4000`, `6500`.
+- `--require-kelvin` Skip pure RGB payloads (only send combined RGB/Kelvin variants).
+- `--stop-on-success` Stop probing once any response is received.
 
 ---
 
