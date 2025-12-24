@@ -81,13 +81,26 @@ def interrogate_all(
     verbose: bool,
     enrich: bool,
     only_ips: Optional[list[str]] = None,
+    target_ips: Optional[list[str]] = None,
 ) -> None:
     sock = make_control_socket(bind_ip=bind_ip, timeout_s=timeout_s)
 
-    targets = store.list_device_targets()
-    if only_ips:
-        allowed = set(only_ips)
-        targets = [t for t in targets if t["ip"] in allowed]
+    # Build target list, either from explicit IPs or discovered devices.
+    if target_ips is not None:
+        known_targets = {t["ip"]: t for t in store.list_device_targets()}
+        seen_ips: set[str] = set()
+        targets = []
+        for ip in target_ips:
+            if ip in seen_ips:
+                continue
+            seen_ips.add(ip)
+            known = known_targets.get(ip)
+            targets.append({"device_id": known["device_id"] if known else None, "ip": ip})
+    else:
+        targets = store.list_device_targets()
+        if only_ips:
+            allowed = set(only_ips)
+            targets = [t for t in targets if t["ip"] in allowed]
 
     for t in targets:
         device_id = t["device_id"]
@@ -109,7 +122,7 @@ def interrogate_all(
             response_obj=resp,
         )
 
-        if ok and resp and enrich:
+        if ok and resp and enrich and device_id:
             enrich_from_dev_status(store, device_id=device_id, status_obj=resp)
 
         if verbose:

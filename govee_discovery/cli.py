@@ -100,6 +100,7 @@ def cmd_interrogate(args: argparse.Namespace) -> int:
             verbose=args.verbose,
             enrich=not args.no_enrich,
             only_ips=args.only_ip,
+            target_ips=args.ip,
         )
         return 0
     finally:
@@ -228,6 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
     pi = sub.add_parser("interrogate", help="Interrogate discovered devices to enrich the registry (devStatus).")
     add_common_db_args(pi)
     pi.add_argument("--timeout", type=float, default=2.0, help="UDP receive timeout (seconds).")
+    pi.add_argument("--ip", action="append", default=None, help="Interrogate explicit IP (repeatable).")
     pi.add_argument("--only-ip", action="append", default=None, help="Restrict to a specific device IP (repeatable).")
     pi.add_argument("--no-enrich", action="store_true", help="Do not normalize status fields into device_kv.")
     pi.add_argument("--verbose", action="store_true")
