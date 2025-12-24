@@ -62,6 +62,14 @@ def build_color_temp_command(kelvin: int) -> dict[str, Any]:
     return {"msg": {"cmd": "colorTem", "data": {"value": kelvin}}}
 
 
+def build_colorwc_command(kelvin: int, color: tuple[int, int, int] | None) -> dict[str, Any]:
+    data: dict[str, Any] = {"colorTemInKelvin": kelvin}
+    if color is not None:
+        r, g, b = color
+        data["color"] = {"r": r, "g": g, "b": b}
+    return {"msg": {"cmd": "colorwc", "data": data}}
+
+
 def send_control_command(
     *,
     ip: str,
