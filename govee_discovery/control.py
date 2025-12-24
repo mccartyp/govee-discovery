@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import re
 import socket
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Iterable, Optional, Sequence
 
 from .net import CONTROL_PORT, make_control_socket
 
@@ -92,24 +93,123 @@ def build_color_payload(
     scale_max: int = 255,
 ) -> dict[str, Any]:
     cmd = command.strip()
-    if cmd not in {"color", "colorwc", "setColor"}:
+    if cmd not in {"color", "colorwc", "setColor", "setColorWC"}:
         raise ValueError(f"unsupported color command: {cmd}")
     if scale_max not in (100, 255):
         raise ValueError("color scale must be 100 or 255")
 
-    if cmd == "colorwc":
-        if kelvin is None or kelvin <= 0:
-            raise ValueError("colorwc command requires a positive kelvin value")
-        data: dict[str, Any] = {"colorTemInKelvin": kelvin}
-        if color is not None:
-            r, g, b = _scale_color(color, scale_max)
-            data["color"] = {"r": r, "g": g, "b": b}
-        return {"msg": {"cmd": cmd, "data": data}}
+    data: dict[str, Any] = {}
+    if color is not None:
+        r, g, b = _scale_color(color, scale_max)
+        data["color"] = {"r": r, "g": g, "b": b}
 
-    if color is None:
+    if kelvin is not None:
+        if kelvin <= 0:
+            raise ValueError("kelvin must be positive when provided")
+        data["colorTemInKelvin"] = kelvin
+
+    if cmd in {"color", "setColor"} and "color" not in data:
         raise ValueError(f"{cmd} command requires a color value")
-    r, g, b = _scale_color(color, scale_max)
-    return {"msg": {"cmd": cmd, "data": {"color": {"r": r, "g": g, "b": b}}}}
+    if cmd in {"colorwc", "setColorWC"} and "colorTemInKelvin" not in data:
+        raise ValueError(f"{cmd} command requires a positive kelvin value")
+
+    return {"msg": {"cmd": cmd, "data": data}}
+
+
+@dataclass
+class ColorProbeResult:
+    command: str
+    scale_max: int
+    kelvin: int | None
+    color_name: str
+    payload: dict[str, Any]
+    ok: bool
+    resp: Optional[dict[str, Any]]
+    error: Optional[str]
+
+    def status(self) -> str:
+        if not self.ok:
+            return self.error or "error"
+        if self.resp is not None:
+            msg = self.resp.get("msg") if isinstance(self.resp, dict) else None
+            if isinstance(msg, dict):
+                code = msg.get("code")
+                if code is not None:
+                    return f"resp code={code}"
+            return "resp"
+        if self.error:
+            return self.error
+        return "no_resp"
+
+
+def iter_color_probe_payloads(
+    *,
+    colors: Sequence[tuple[str, tuple[int, int, int]]],
+    kelvin_values: Sequence[int],
+    include_no_kelvin: bool = True,
+    scale_values: Iterable[int] = (255, 100),
+) -> Iterable[tuple[str, int, int | None, str, dict[str, Any]]]:
+    commands = ("color", "colorwc", "setColor", "setColorWC")
+    for color_name, color_value in colors:
+        for cmd in commands:
+            for scale in scale_values:
+                kelvin_candidates: list[int | None] = list(kelvin_values)
+                if include_no_kelvin and cmd in {"color", "setColor"}:
+                    kelvin_candidates = [None, *kelvin_candidates]
+                for kelvin in kelvin_candidates:
+                    if cmd in {"colorwc", "setColorWC"} and kelvin is None:
+                        continue
+                    try:
+                        payload = build_color_payload(cmd, color=color_value, kelvin=kelvin, scale_max=scale)
+                    except ValueError:
+                        continue
+                    yield cmd, scale, kelvin, color_name, payload
+
+
+def run_color_probe(
+    *,
+    ip: str,
+    colors: Sequence[tuple[str, tuple[int, int, int]]],
+    kelvin_values: Sequence[int],
+    include_no_kelvin: bool,
+    bind_ip: str,
+    timeout_s: float,
+    stop_on_success: bool,
+    verbose: bool,
+) -> list[ColorProbeResult]:
+    results: list[ColorProbeResult] = []
+    for cmd, scale, kelvin, color_name, payload in iter_color_probe_payloads(
+        colors=colors,
+        kelvin_values=kelvin_values,
+        include_no_kelvin=include_no_kelvin,
+    ):
+        if verbose:
+            payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            print(
+                f"[probe] ip={ip} cmd={cmd} scale={scale} kelvin={kelvin or '-'} color={color_name} payload={payload_json}",
+                flush=True,
+            )
+        ok, resp, err = send_control_command(
+            ip=ip,
+            payload=payload,
+            bind_ip=bind_ip,
+            timeout_s=timeout_s,
+            wait_response=True,
+        )
+        result = ColorProbeResult(
+            command=cmd,
+            scale_max=scale,
+            kelvin=kelvin,
+            color_name=color_name,
+            payload=payload,
+            ok=ok,
+            resp=resp,
+            error=err,
+        )
+        results.append(result)
+        if stop_on_success and result.ok and result.resp is not None:
+            break
+    return results
 
 
 def send_control_command(

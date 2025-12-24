@@ -10,6 +10,7 @@ from .control import (
     build_brightness_command,
     build_color_temp_command,
     build_color_payload,
+    run_color_probe,
     build_turn_command,
     parse_color,
     send_control_command,
@@ -154,6 +155,63 @@ def cmd_control(args: argparse.Namespace) -> int:
                     kelvin=args.kelvin,
                     scale_max=args.color_scale,
                 )
+            elif args.action == "color-probe":
+                colors = args.color or ["red", "green", "blue"]
+                kelvins = args.kelvin or [3000, 4000, 6500]
+                parsed_colors: list[tuple[str, tuple[int, int, int]]] = []
+                for color_name in colors:
+                    try:
+                        parsed_colors.append((color_name, parse_color(color_name)))
+                    except ValueError as exc:
+                        print(f"[control] invalid color {color_name!r}: {exc}", flush=True)
+                        return 2
+
+                if not kelvins:
+                    print("[control] at least one kelvin value is required", flush=True)
+                    return 2
+
+                results = run_color_probe(
+                    ip=ip,
+                    colors=parsed_colors,
+                    kelvin_values=kelvins,
+                    include_no_kelvin=not args.require_kelvin,
+                    bind_ip=args.bind_ip,
+                    timeout_s=args.timeout,
+                    stop_on_success=args.stop_on_success,
+                    verbose=args.verbose,
+                )
+
+                if not results:
+                    print("[control] no probe payloads were generated", flush=True)
+                    return 1
+
+                headers = ["cmd", "scale", "kelvin", "color", "status"]
+                rows = []
+                for res in results:
+                    rows.append(
+                        [
+                            res.command,
+                            str(res.scale_max),
+                            str(res.kelvin) if res.kelvin is not None else "-",
+                            res.color_name,
+                            res.status(),
+                        ]
+                    )
+
+                widths = [len(h) for h in headers]
+                for row in rows:
+                    for i, val in enumerate(row):
+                        widths[i] = max(widths[i], len(val))
+
+                def _fmt(row: list[str]) -> str:
+                    return "  ".join(val.ljust(widths[i]) for i, val in enumerate(row))
+
+                print(_fmt(headers))
+                print(_fmt(["-" * w for w in widths]))
+                for row in rows:
+                    print(_fmt(row))
+
+                return 0
             else:
                 raise ValueError(f"unknown control action: {args.action}")
         except ValueError as exc:
@@ -341,6 +399,34 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=255,
         help="Scale RGB output to 0-100 (some models expect 0-100 instead of 0-255).",
+    )
+
+    pc_probe = pc_sub.add_parser(
+        "color-probe",
+        help="Try color variants (color/colorwc/setColor/setColorWC, 0-255 + 0-100, Kelvin/no Kelvin).",
+    )
+    pc_probe.add_argument(
+        "--color",
+        action="append",
+        default=None,
+        help="Probe with this color name or hex (repeatable). Default: red, green, blue.",
+    )
+    pc_probe.add_argument(
+        "--kelvin",
+        type=int,
+        action="append",
+        default=None,
+        help="Probe with this Kelvin (repeatable). Default: 3000, 4000, 6500.",
+    )
+    pc_probe.add_argument(
+        "--require-kelvin",
+        action="store_true",
+        help="Do not send payloads without colorTemInKelvin (skip pure RGB variants).",
+    )
+    pc_probe.add_argument(
+        "--stop-on-success",
+        action="store_true",
+        help="Stop after the first response is received (useful for long probe lists).",
     )
 
     pc.set_defaults(func=cmd_control)
