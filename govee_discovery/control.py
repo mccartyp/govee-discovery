@@ -70,6 +70,48 @@ def build_colorwc_command(kelvin: int, color: tuple[int, int, int] | None) -> di
     return {"msg": {"cmd": "colorwc", "data": data}}
 
 
+def _scale_color(color: tuple[int, int, int], scale_max: int) -> tuple[int, int, int]:
+    if scale_max not in (100, 255):
+        raise ValueError("color scale must be 100 or 255")
+    if scale_max == 255:
+        return color
+    r, g, b = color
+    scaled = (
+        round((r / 255) * scale_max),
+        round((g / 255) * scale_max),
+        round((b / 255) * scale_max),
+    )
+    return scaled
+
+
+def build_color_payload(
+    command: str,
+    *,
+    color: tuple[int, int, int] | None,
+    kelvin: int | None,
+    scale_max: int = 255,
+) -> dict[str, Any]:
+    cmd = command.strip()
+    if cmd not in {"color", "colorwc", "setColor"}:
+        raise ValueError(f"unsupported color command: {cmd}")
+    if scale_max not in (100, 255):
+        raise ValueError("color scale must be 100 or 255")
+
+    if cmd == "colorwc":
+        if kelvin is None or kelvin <= 0:
+            raise ValueError("colorwc command requires a positive kelvin value")
+        data: dict[str, Any] = {"colorTemInKelvin": kelvin}
+        if color is not None:
+            r, g, b = _scale_color(color, scale_max)
+            data["color"] = {"r": r, "g": g, "b": b}
+        return {"msg": {"cmd": cmd, "data": data}}
+
+    if color is None:
+        raise ValueError(f"{cmd} command requires a color value")
+    r, g, b = _scale_color(color, scale_max)
+    return {"msg": {"cmd": cmd, "data": {"color": {"r": r, "g": g, "b": b}}}}
+
+
 def send_control_command(
     *,
     ip: str,
