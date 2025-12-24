@@ -1,8 +1,8 @@
 # govee-discovery
 
-A small Python toolchain for discovering and interrogating Govee devices that support the Govee LAN Control API.
+A small Python toolchain for discovering, interrogating, and performing limited LAN control of Govee devices that support the Govee LAN Control API.
 
-This project is intended to act as a **registry builder** that can later feed an operational module (for example, an Art-Net → Govee bridge). Discovery and operational control are intentionally separate concerns.
+This project is intended to act as a **registry builder** that can later feed an operational module (for example, an Art-Net → Govee bridge). Discovery and operational control are intentionally separate concerns, but the tool includes basic control actions for convenience when testing.
 
 ---
 
@@ -287,6 +287,26 @@ Options:
 - `--stop-on-success` Stop probing once any response is received.
 - Each attempt is logged (command, scale, Kelvin, color, status) and a 1-second pause is inserted between attempts
   to avoid flooding devices. Missing replies are recorded as `timeout` instead of failing the probe.
+
+---
+
+## Supported Control and Probe Capabilities
+
+- Control actions: on/off, brightness, RGB color, and color temperature (Kelvin).
+- LAN control is intentionally limited and provided alongside discovery/interrogation to validate device behavior.
+- The `color-probe` helper fuzzes common command/scale/Kelvin combinations to learn which payload variants a device accepts.
+
+---
+
+## Testing
+
+- RGB control verified on Govee SKU `H618A` using:
+
+  ```
+  govee-discovery control --ip <ip> color green --color-cmd colorwc
+  ```
+
+  (Kelvin not used for this device.) Devices may apply commands without returning a reply.
 
 ---
 
