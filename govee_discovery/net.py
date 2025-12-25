@@ -41,13 +41,17 @@ def make_listener_socket(bind_ip: str = "") -> socket.socket:
     return s
 
 
-def make_control_socket(bind_ip: str = "", timeout_s: float = 2.0) -> socket.socket:
+def make_control_socket(bind_ip: str = "", listen_port: int = 0, timeout_s: float = 2.0) -> socket.socket:
     """
     UDP socket for unicast control/status queries to device port 4003.
+
+    listen_port allows binding to a specific local port (e.g., 4003 for replies).
+    Default is 0 for an ephemeral port when no response is expected.
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    if bind_ip:
-        s.bind((bind_ip, 0))
+    if bind_ip or listen_port:
+        bind_addr = bind_ip if bind_ip else "0.0.0.0"
+        s.bind((bind_addr, listen_port))
     s.settimeout(timeout_s)
     return s
