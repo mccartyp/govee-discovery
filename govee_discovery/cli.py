@@ -222,16 +222,22 @@ def cmd_control(args: argparse.Namespace) -> int:
             print(f"[control] invalid input: {exc}", flush=True)
             return 2
 
+        wait_response = not args.no_wait
+        if args.action == "brightness":
+            wait_response = False
+
         if args.verbose:
             payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             print(f"[control] ip={ip} action={args.action} payload={payload_json}", flush=True)
+            if args.action == "brightness":
+                print("[control] brightness does not expect a reply; not waiting for response", flush=True)
 
         ok, resp, err = send_control_command(
             ip=ip,
             payload=payload,
             bind_ip=args.bind_ip,
             timeout_s=args.timeout,
-            wait_response=not args.no_wait,
+            wait_response=wait_response,
         )
 
         if not ok:
