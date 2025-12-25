@@ -83,7 +83,7 @@ def interrogate_all(
     only_ips: Optional[list[str]] = None,
     target_ips: Optional[list[str]] = None,
 ) -> None:
-    sock = make_control_socket(bind_ip=bind_ip, timeout_s=timeout_s)
+    sock = make_control_socket(bind_ip=bind_ip, listen_port=CONTROL_PORT, timeout_s=timeout_s)
 
     # Build target list, either from explicit IPs or discovered devices.
     if target_ips is not None:

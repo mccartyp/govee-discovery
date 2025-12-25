@@ -231,7 +231,8 @@ def send_control_command(
     wait_response: bool,
 ) -> tuple[bool, Optional[dict[str, Any]], Optional[str]]:
     blob = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    sock = make_control_socket(bind_ip=bind_ip, timeout_s=timeout_s)
+    listen_port = CONTROL_PORT if wait_response else 0
+    sock = make_control_socket(bind_ip=bind_ip, listen_port=listen_port, timeout_s=timeout_s)
     try:
         sock.sendto(blob, (ip, CONTROL_PORT))
         if not wait_response:
