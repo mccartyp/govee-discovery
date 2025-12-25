@@ -90,6 +90,9 @@ def interrogate_device_dev_status(
                 return False, None, f"error:{e}"
 
             obj = safe_json_loads(data)
+            if debug_payload and recv_port is not None:
+                payload = data.decode("utf-8", errors="replace")
+                print(f"[devStatus][recv] ip={ip} port={recv_port} payload={payload}", flush=True)
             if isinstance(obj, dict) and is_dev_status_response(obj):
                 break
             if verbose and recv_port is not None:
