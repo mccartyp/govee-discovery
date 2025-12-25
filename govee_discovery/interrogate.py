@@ -43,9 +43,15 @@ def extract_status_data(obj: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 
 def interrogate_device_dev_status(
-    sock: socket.socket, ip: str, device_id: Optional[str] = None, sku: Optional[str] = None
+    sock: socket.socket,
+    ip: str,
+    device_id: Optional[str] = None,
+    sku: Optional[str] = None,
+    debug_payload: bool = False,
 ) -> tuple[bool, Optional[dict[str, Any]], Optional[str]]:
     req = build_dev_status_request(device_id=device_id, sku=sku)
+    if debug_payload:
+        print(f"[devStatus][send] ip={ip} payload={json.dumps(req, separators=(',',':'))}", flush=True)
     blob = json.dumps(req, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
     orig_timeout = sock.gettimeout()
@@ -102,6 +108,7 @@ def interrogate_all(
     timeout_s: float,
     verbose: bool,
     enrich: bool,
+    debug_payload: bool = False,
     only_ips: Optional[list[str]] = None,
     target_ips: Optional[list[str]] = None,
 ) -> None:
@@ -136,7 +143,13 @@ def interrogate_all(
         sku = t.get("sku")
         sent = now_ms()
 
-        ok, resp, err = interrogate_device_dev_status(sock, ip=ip, device_id=device_id, sku=sku)
+        ok, resp, err = interrogate_device_dev_status(
+            sock,
+            ip=ip,
+            device_id=device_id,
+            sku=sku,
+            debug_payload=debug_payload,
+        )
 
         received = now_ms() if ok else None
         store.record_interrogation(
