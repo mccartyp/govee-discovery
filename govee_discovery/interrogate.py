@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import select
 import socket
 import time
 from typing import Any, Optional
 
-from .net import CONTROL_PORT, make_control_socket
+from .net import CONTROL_PORT, LISTEN_PORT, make_bound_socket
 from .store import RegistryStore, now_ms
 
 
@@ -43,30 +44,44 @@ def extract_status_data(obj: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 
 def interrogate_device_dev_status(
-    sock: socket.socket,
+    sock_primary: socket.socket,
+    sock_secondary: Optional[socket.socket],
     ip: str,
     device_id: Optional[str] = None,
     sku: Optional[str] = None,
     debug_payload: bool = False,
+    verbose: bool = False,
 ) -> tuple[bool, Optional[dict[str, Any]], Optional[str]]:
     req = build_dev_status_request(device_id=device_id, sku=sku)
     if debug_payload:
         print(f"[devStatus][send] ip={ip} payload={json.dumps(req, separators=(',',':'))}", flush=True)
     blob = json.dumps(req, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
-    orig_timeout = sock.gettimeout()
+    orig_timeout = sock_primary.gettimeout()
     deadline = (time.monotonic() + orig_timeout) if orig_timeout is not None else None
+    recv_port: Optional[int] = None
 
     try:
-        sock.sendto(blob, (ip, CONTROL_PORT))
+        sock_primary.sendto(blob, (ip, CONTROL_PORT))
         while True:
             try:
                 if deadline is not None:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise socket.timeout
-                    sock.settimeout(remaining)
-                data, _addr = sock.recvfrom(8192)
+                    sock_primary.settimeout(remaining)
+                    if sock_secondary is not None:
+                        sock_secondary.settimeout(remaining)
+
+                socks_to_poll = [sock_primary]
+                if sock_secondary is not None:
+                    socks_to_poll.append(sock_secondary)
+                rlist, _wlist, _xlist = select.select(socks_to_poll, [], [], None if deadline is None else remaining)
+                if not rlist:
+                    raise socket.timeout
+                recv_sock = rlist[0]
+                data, _addr = recv_sock.recvfrom(8192)
+                recv_port = recv_sock.getsockname()[1]
             except socket.timeout:
                 return False, None, "timeout"
             except OSError as e:
@@ -75,11 +90,18 @@ def interrogate_device_dev_status(
                 return False, None, f"error:{e}"
 
             obj = safe_json_loads(data)
-            if isinstance(obj, dict):
+            if isinstance(obj, dict) and is_dev_status_response(obj):
                 break
+            if verbose and recv_port is not None:
+                print(f"[devStatus][ignore] ip={ip} port={recv_port}", flush=True)
     finally:
         if orig_timeout is not None:
-            sock.settimeout(orig_timeout)
+            sock_primary.settimeout(orig_timeout)
+        if sock_secondary is not None and orig_timeout is not None:
+            sock_secondary.settimeout(orig_timeout)
+
+    if verbose and recv_port is not None:
+        print(f"[devStatus][recv] ip={ip} port={recv_port}", flush=True)
 
     if not is_dev_status_response(obj):
         # Preserve unexpected responses; still store them.
@@ -111,8 +133,17 @@ def interrogate_all(
     debug_payload: bool = False,
     only_ips: Optional[list[str]] = None,
     target_ips: Optional[list[str]] = None,
+    listen_also_4002: bool = True,
+    control_port: int = CONTROL_PORT,
 ) -> None:
-    sock = make_control_socket(bind_ip=bind_ip, listen_port=CONTROL_PORT, timeout_s=timeout_s)
+    sock_primary = make_bound_socket(bind_ip=bind_ip, listen_port=control_port, timeout_s=timeout_s)
+    sock_secondary = None
+    if listen_also_4002 and control_port != LISTEN_PORT:
+        try:
+            sock_secondary = make_bound_socket(bind_ip=bind_ip, listen_port=LISTEN_PORT, timeout_s=timeout_s)
+        except OSError as exc:
+            if verbose:
+                print(f"[devStatus] failed to bind secondary listener on {LISTEN_PORT}: {exc}", flush=True)
 
     # Build target list, either from explicit IPs or discovered devices.
     if target_ips is not None:
@@ -144,11 +175,13 @@ def interrogate_all(
         sent = now_ms()
 
         ok, resp, err = interrogate_device_dev_status(
-            sock,
+            sock_primary,
+            sock_secondary,
             ip=ip,
             device_id=device_id,
             sku=sku,
             debug_payload=debug_payload,
+            verbose=verbose,
         )
 
         received = now_ms() if ok else None
@@ -170,4 +203,6 @@ def interrogate_all(
         if verbose:
             print(f"[devStatus] ip={ip} device={device_id} ok={ok} err={err or '-'}", flush=True)
 
-    sock.close()
+    sock_primary.close()
+    if sock_secondary is not None:
+        sock_secondary.close()

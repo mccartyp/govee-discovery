@@ -17,6 +17,7 @@ from .control import (
 )
 from .discovery import run_listener, run_scan
 from .interrogate import interrogate_all
+from .net import CONTROL_PORT
 from .store import RegistryStore
 
 
@@ -103,6 +104,8 @@ def cmd_interrogate(args: argparse.Namespace) -> int:
             debug_payload=args.debug_payload,
             only_ips=args.only_ip,
             target_ips=args.ip,
+            listen_also_4002=args.listen_also_4002,
+            control_port=args.control_port,
         )
         return 0
     finally:
@@ -308,7 +311,13 @@ def build_parser() -> argparse.ArgumentParser:
     pd.set_defaults(func=cmd_dump)
 
     # interrogate
-    pi = sub.add_parser("interrogate", help="Interrogate discovered devices to enrich the registry (devStatus).")
+    pi = sub.add_parser(
+        "interrogate",
+        help=(
+            "Interrogate discovered devices to enrich the registry (devStatus). "
+            "Listens on the control port and UDP/4002 to catch replies."
+        ),
+    )
     add_common_db_args(pi)
     pi.add_argument("--timeout", type=float, default=2.0, help="UDP receive timeout (seconds).")
     pi.add_argument("--ip", action="append", default=None, help="Interrogate explicit IP (repeatable).")
@@ -318,6 +327,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--debug-payload",
         action="store_true",
         help="Log outgoing devStatus JSON payloads before sending.",
+    )
+    pi.add_argument(
+        "--control-port",
+        type=int,
+        default=CONTROL_PORT,
+        help="Local source port for devStatus requests (use 4002 if replies arrive on 4002).",
+    )
+    pi.add_argument(
+        "--listen-also-4002",
+        dest="listen_also_4002",
+        action="store_true",
+        default=True,
+        help="Also bind a listener on UDP/4002 to capture devStatus replies (default: on).",
+    )
+    pi.add_argument(
+        "--no-listen-also-4002",
+        dest="listen_also_4002",
+        action="store_false",
+        help="Disable the secondary UDP/4002 listener.",
     )
     pi.add_argument("--verbose", action="store_true")
     pi.set_defaults(func=cmd_interrogate)
