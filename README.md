@@ -184,6 +184,10 @@ Options:
 - `--ip A.B.C.D` (repeatable) interrogate IPs directly (bypass registry)
 - `--only-ip A.B.C.D` (repeatable)
 - `--no-enrich` do not normalize fields into `device_kv`
+- `--control-port PORT` (default: 4003) bind the local devStatus sender to this port (use `4002` if replies show up on UDP/4002)
+- `--listen-also-4002/--no-listen-also-4002` also bind UDP/4002 for replies (default: on; disable if the port is in use)
+
+By default `interrogate` binds both the control port and UDP/4002 so devices that reply to either port are captured. For devices that respond on UDP/4002, run with `--control-port 4002` to match the expected source port and avoid ICMP errors.
 
 ---
 

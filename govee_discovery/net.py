@@ -8,6 +8,20 @@ LISTEN_PORT = 4002
 CONTROL_PORT = 4003
 
 
+def make_bound_socket(bind_ip: str = "", listen_port: int = 0, timeout_s: float = 2.0) -> socket.socket:
+    """UDP socket bound to a specific local address/port.
+
+    Used for control/status responses where multicast membership is not required.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    bind_addr = bind_ip if bind_ip else "0.0.0.0"
+    s.bind((bind_addr, listen_port))
+    s.settimeout(timeout_s)
+    return s
+
+
 def make_mcast_sender_socket(bind_ip: str = "") -> socket.socket:
     """
     UDP socket for sending multicast scan request to 239.255.255.250:4001.
