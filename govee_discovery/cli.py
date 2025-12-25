@@ -100,6 +100,7 @@ def cmd_interrogate(args: argparse.Namespace) -> int:
             timeout_s=args.timeout,
             verbose=args.verbose,
             enrich=not args.no_enrich,
+            debug_payload=args.debug_payload,
             only_ips=args.only_ip,
             target_ips=args.ip,
         )
@@ -313,6 +314,11 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--ip", action="append", default=None, help="Interrogate explicit IP (repeatable).")
     pi.add_argument("--only-ip", action="append", default=None, help="Restrict to a specific device IP (repeatable).")
     pi.add_argument("--no-enrich", action="store_true", help="Do not normalize status fields into device_kv.")
+    pi.add_argument(
+        "--debug-payload",
+        action="store_true",
+        help="Log outgoing devStatus JSON payloads before sending.",
+    )
     pi.add_argument("--verbose", action="store_true")
     pi.set_defaults(func=cmd_interrogate)
 
