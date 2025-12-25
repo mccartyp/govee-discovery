@@ -50,6 +50,7 @@ class RegistryStore:
                 wifi_version_soft TEXT,
                 mac TEXT,
                 last_scan_payload TEXT,
+                last_status_ms INTEGER,
                 last_status_payload TEXT,
                 first_seen_ms INTEGER NOT NULL,
                 last_seen_ms INTEGER NOT NULL,
@@ -100,6 +101,14 @@ class RegistryStore:
             """
         )
         self.conn.commit()
+        self._upgrade_schema()
+
+    def _upgrade_schema(self) -> None:
+        cur = self.conn.execute("PRAGMA table_info(devices)")
+        cols = {r[1] for r in cur.fetchall()}
+        if "last_status_ms" not in cols:
+            self.conn.execute("ALTER TABLE devices ADD COLUMN last_status_ms INTEGER")
+            self.conn.commit()
 
     # ---------- Persistence primitives ----------
 
@@ -135,10 +144,11 @@ class RegistryStore:
                 wifi_version_hard, wifi_version_soft,
                 mac,
                 last_scan_payload,
+                last_status_ms,
                 first_seen_ms, last_seen_ms,
                 extra_json
             )
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(device_id) DO UPDATE SET
                 ip=COALESCE(excluded.ip, devices.ip),
                 sku=COALESCE(excluded.sku, devices.sku),
@@ -160,6 +170,7 @@ class RegistryStore:
                 wifi_sw,
                 mac,
                 scan_payload_raw,
+                None,
                 first_seen_ms,
                 seen_ms,
                 json.dumps({}, separators=(",", ":")),
@@ -204,8 +215,12 @@ class RegistryStore:
 
         if success and device_id and response_obj is not None and cmd == "devStatus":
             self.conn.execute(
-                "UPDATE devices SET last_status_payload=? WHERE device_id=?",
-                (json.dumps(response_obj, ensure_ascii=False, separators=(",", ":")), device_id),
+                "UPDATE devices SET last_status_payload=?, last_status_ms=? WHERE device_id=?",
+                (
+                    json.dumps(response_obj, ensure_ascii=False, separators=(",", ":")),
+                    received_at_ms,
+                    device_id,
+                ),
             )
 
         self.conn.commit()
@@ -231,7 +246,7 @@ class RegistryStore:
             SELECT device_id, ip, sku, ble_version_hard, ble_version_soft,
                    wifi_version_hard, wifi_version_soft, mac,
                    first_seen_ms, last_seen_ms,
-                   last_scan_payload, last_status_payload, extra_json
+                   last_scan_payload, last_status_ms, last_status_payload, extra_json
             FROM devices
             ORDER BY last_seen_ms DESC
             """
@@ -252,8 +267,9 @@ class RegistryStore:
                     "first_seen_ms": r[8],
                     "last_seen_ms": r[9],
                     "last_scan_payload": json.loads(r[10]) if r[10] else None,
-                    "last_status_payload": json.loads(r[11]) if r[11] else None,
-                    "extra": json.loads(r[12]) if r[12] else {},
+                    "last_status_ms": r[11],
+                    "last_status_payload": json.loads(r[12]) if r[12] else None,
+                    "extra": json.loads(r[13]) if r[13] else {},
                 }
             )
         return out
