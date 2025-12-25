@@ -258,7 +258,8 @@ Notes:
 - `--kelvin` can be supplied to the `color` action when using `--color-cmd colorwc` to send combined color/Kelvin
   payloads.
 - `--color-scale` scales RGB values to `0-100` instead of `0-255` for models that expect the smaller range.
-- Use `--no-wait` to skip waiting for device responses.
+- RGB (`color`), Kelvin (`color-temp`), dual RGB/Kelvin (`colorwc`), and brightness commands are fire-and-forget and
+  do not wait for device replies by default. Use `--no-wait` to force other actions to skip waiting for responses.
 
 #### Probe control payloads
 
