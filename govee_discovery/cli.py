@@ -223,14 +223,18 @@ def cmd_control(args: argparse.Namespace) -> int:
             return 2
 
         wait_response = not args.no_wait
-        if args.action == "brightness":
+        fire_and_forget_actions = {"brightness", "color", "color-temp", "colorwc"}
+        if args.action in fire_and_forget_actions:
             wait_response = False
 
         if args.verbose:
             payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             print(f"[control] ip={ip} action={args.action} payload={payload_json}", flush=True)
-            if args.action == "brightness":
-                print("[control] brightness does not expect a reply; not waiting for response", flush=True)
+            if not wait_response:
+                reason = "--no-wait set" if args.no_wait and args.action not in fire_and_forget_actions else None
+                prefix = f"[control] {args.action}" if args.action else "[control]"
+                detail = reason or "does not expect a reply; not waiting for response"
+                print(f"{prefix} {detail}", flush=True)
 
         ok, resp, err = send_control_command(
             ip=ip,
