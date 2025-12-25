@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
+import time
 from typing import Any, Optional
 
 from .net import CONTROL_PORT, make_control_socket
@@ -15,8 +16,13 @@ def safe_json_loads(data: bytes) -> Optional[dict[str, Any]]:
         return None
 
 
-def build_dev_status_request() -> dict[str, Any]:
-    return {"msg": {"cmd": "devStatus", "data": {}}}
+def build_dev_status_request(device_id: Optional[str] = None, sku: Optional[str] = None) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    if device_id:
+        data["device"] = device_id
+    if sku:
+        data["sku"] = sku
+    return {"msg": {"cmd": "devStatus", "data": data}}
 
 
 def is_dev_status_response(obj: dict[str, Any]) -> bool:
@@ -36,23 +42,39 @@ def extract_status_data(obj: dict[str, Any]) -> Optional[dict[str, Any]]:
     return data
 
 
-def interrogate_device_dev_status(sock: socket.socket, ip: str) -> tuple[bool, Optional[dict[str, Any]], Optional[str]]:
-    req = build_dev_status_request()
+def interrogate_device_dev_status(
+    sock: socket.socket, ip: str, device_id: Optional[str] = None, sku: Optional[str] = None
+) -> tuple[bool, Optional[dict[str, Any]], Optional[str]]:
+    req = build_dev_status_request(device_id=device_id, sku=sku)
     blob = json.dumps(req, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+    orig_timeout = sock.gettimeout()
+    deadline = (time.monotonic() + orig_timeout) if orig_timeout is not None else None
 
     try:
         sock.sendto(blob, (ip, CONTROL_PORT))
-        data, _addr = sock.recvfrom(8192)
-    except socket.timeout:
-        return False, None, "timeout"
-    except OSError as e:
-        return False, None, f"oserror:{e}"
-    except Exception as e:
-        return False, None, f"error:{e}"
+        while True:
+            try:
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise socket.timeout
+                    sock.settimeout(remaining)
+                data, _addr = sock.recvfrom(8192)
+            except socket.timeout:
+                return False, None, "timeout"
+            except OSError as e:
+                return False, None, f"oserror:{e}"
+            except Exception as e:
+                return False, None, f"error:{e}"
 
-    obj = safe_json_loads(data)
-    if not isinstance(obj, dict):
-        return False, None, "invalid_json"
+            obj = safe_json_loads(data)
+            if isinstance(obj, dict):
+                break
+    finally:
+        if orig_timeout is not None:
+            sock.settimeout(orig_timeout)
+
     if not is_dev_status_response(obj):
         # Preserve unexpected responses; still store them.
         return True, obj, "unexpected_cmd"
@@ -95,7 +117,13 @@ def interrogate_all(
                 continue
             seen_ips.add(ip)
             known = known_targets.get(ip)
-            targets.append({"device_id": known["device_id"] if known else None, "ip": ip})
+            targets.append(
+                {
+                    "device_id": known["device_id"] if known else None,
+                    "ip": ip,
+                    "sku": known["sku"] if known else None,
+                }
+            )
     else:
         targets = store.list_device_targets()
         if only_ips:
@@ -105,9 +133,10 @@ def interrogate_all(
     for t in targets:
         device_id = t["device_id"]
         ip = t["ip"]
+        sku = t.get("sku")
         sent = now_ms()
 
-        ok, resp, err = interrogate_device_dev_status(sock, ip=ip)
+        ok, resp, err = interrogate_device_dev_status(sock, ip=ip, device_id=device_id, sku=sku)
 
         received = now_ms() if ok else None
         store.record_interrogation(
@@ -118,7 +147,7 @@ def interrogate_all(
             received_at_ms=received,
             success=ok,
             error=err,
-            request_obj=build_dev_status_request(),
+            request_obj=build_dev_status_request(device_id=device_id, sku=sku),
             response_obj=resp,
         )
 
